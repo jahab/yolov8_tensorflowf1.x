@@ -5,7 +5,7 @@ tf.enable_eager_execution(
 
 import numpy as np 
 import logging
-
+import traceback
 
 # Configure the logger
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -95,7 +95,7 @@ def C2F(input_data,ch_in:int,ch_out:int, replicate:int, shortcut:bool,e=0.5):
     return conv2
     
 
-def SPPF(input_data,ch_in,ch_out, k=(1,1),):
+def SPPF(input_data,ch_in,ch_out, k=(1,1)):
     kernel_shape=(*k,ch_in,ch_out)
     c1 = Conv(input_data,kernel_shape,True,downsample=False)
     maxpool1 = tf.layers.MaxPooling2D(5,1, padding="same")
@@ -109,7 +109,7 @@ def SPPF(input_data,ch_in,ch_out, k=(1,1),):
 
 
 class YOLO():
-    def __init__(self,d:float,w:float,r:float, batch_size:int=4,input_shape:tuple=(640,640,3)) -> None:
+    def __init__(self,d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)) -> None:
         self.depth_multiple = d
         self.width_multiple = w
         self.ratio = r
@@ -117,18 +117,46 @@ class YOLO():
         self.input_shape = input_shape
 
     def Network(self, input_data):
-        k1 = (3,3,3,64*self.width_multiple)
-        c1 = Conv(input_data,k1,True,downsample=True)
-        # logger.info(str(c1.shape))
-        logger.info("layer 1 execute")
-        
-        k1 = (3,3,64*self.width_multiple,128*self.width_multiple)
-        c2 = Conv(c1,k1,True,downsample=True)
-        # logger.info(str(c2.shape))
-        logger.info("layer 2 execute")
-        c3 = C2F(c2,128,128,2,True)
+        try:
 
-        return
+            k1 = (3,3,3,int(64*self.width_multiple))
+            c0 = Conv(input_data,k1,True,downsample=True)
+            logger.info("layer 0 execute")
+            
+            k1 = (3,3,int(64*self.width_multiple),int(128*self.width_multiple))
+            c1 = Conv(c0,k1,True,downsample=True)
+            logger.info("layer 1 execute")
+            
+            c2 = C2F(c1,int(128*self.width_multiple),int(128*self.width_multiple),int(3*self.depth_multiple),True)
+            logger.info("layer 2 execute")
+            
+            k1 = (3,3,int(128*self.width_multiple),int(256*self.width_multiple))
+            c3 = Conv(c2,k1,True,downsample=True)
+            logger.info("layer 3 execute")
+            
+            c4 = C2F(c3,int(256*self.width_multiple),int(256*self.width_multiple),int(6*self.depth_multiple),True)
+            logger.info("Layer 4 execute")
+
+            k1 = (3,3,int(256*self.width_multiple),int(512*self.width_multiple))
+            c5 = Conv(c4,k1,True,downsample=True)
+            logger.info("layer 5 execute {}".format(c5.shape))
+
+            c6 = C2F(c5,int(512*self.width_multiple),int(512*self.width_multiple),int(6*self.depth_multiple),True)
+            logger.info("Layer 6 execute {}".format(c6.shape))
+
+            k1 = (3,3,int(512*self.width_multiple),int(512*self.width_multiple*self.ratio))
+            c7 = Conv(c6,k1,True,downsample=True)
+            logger.info("layer 7 execute {}".format(c7.shape))
+
+            c8 = C2F(c7,int(512*self.width_multiple*self.ratio),int(512*self.width_multiple*self.ratio),int(3*self.depth_multiple),True)
+            logger.info("Layer 8 execute{}".format(c8.shape))
+
+            c9 = SPPF(c8,int(512*self.width_multiple*self.ratio),int(512*self.width_multiple*self.ratio))
+            logger.info("Layer 9 execute {}".format(c9.shape))
+        except:
+            logger.error(traceback.print_exc)
+            return None
+        return c4,c6,c9
     
 
 
@@ -137,20 +165,13 @@ class YOLO():
 if __name__=="__main__":
 
     batch_size = 2
-    height = 320
-    width = 320
+    height = 640
+    width = 640
     channels = 3
-    # input_data = tf.placeholder(tf.float32, shape=(batch_size,height, width,channels))
+    yolov8 = YOLO()
     x = tf.random.uniform([height*width*channels*batch_size],0,1)
     input_data = tf.reshape(x,[batch_size,width,height,channels])
-
-    k1 = (3,3,3,64)
-    c1 = Conv(input_data,k1,True,downsample=True)
-    # logger.info(str(c1.shape))
-    logger.info("layer 1 execute")
-    
-    k1 = (3,3,3,128)
-    c2 = Conv(c1,k1,True,downsample=True)
-    # logger.info(str(c2.shape))
-    logger.info("layer 2 execute")
-    c3 = C2F(c2,128,128,2,True)
+    routes = yolov8.Network(input_data)
+    if routes==None:
+         logger.error("Error in Model Buidling")
+    route1, route2, route3 = routes
