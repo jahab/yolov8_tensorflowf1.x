@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 
-def Conv(input_data, filters_shape:tuple, trainable:bool, name=None, downsample:bool=False, activate:bool=True, bn:bool=True, act_fun='leaky_relu'):
+
+
+def Conv(input_data, filters_shape:tuple, trainable:bool, name=None, downsample:bool=False, padding:str="SAME",  activate:bool=True, bn:bool=True, act_fun='leaky_relu'):
     
     """
     params: 
@@ -30,10 +32,10 @@ def Conv(input_data, filters_shape:tuple, trainable:bool, name=None, downsample:
         paddings = tf.constant([[0, 0], [pad_h, pad_h], [pad_w, pad_w], [0, 0]])
         input_data = tf.pad(input_data, paddings, 'CONSTANT')
         strides = (2, 2)
-        padding = 'VALID'
+        padding="VALID"
     else:
         strides = (1, 1)
-        padding = 'SAME'
+        
 
 
     conv_layer = tf.layers.Conv2D(filters=filters_shape[-1],
@@ -115,19 +117,20 @@ def SPPF(input_data,ch_in,ch_out, k=(1,1)):
     return c2
 
 
-class YOLOV8():
-    def __init__(self,input_data, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)) -> None:
+class YOLOV8(tf.keras.Model):
+    def __init__(self, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)) -> None:
+        super(YOLOV8, self).__init__()
         self.depth_multiple = d
         self.width_multiple = w
         self.ratio = r
         self.batch_size = batch_size
-        self.input_shape = input_shape
-        self.input_data = input_data
+        # self.input_shape = input_shape
+        self.input_data = None
     
-    def Backbone(self):
+    def Backbone(self,input_data):
         try:
             k1 = (3,3,3,int(64*self.width_multiple))
-            c0 = Conv(self.input_data,k1,True,downsample=True)
+            c0 = Conv(input_data,k1,True,downsample=True)
             logger.info("layer 0 execute {}".format(c0.shape))
             
             k1 = (3,3,int(64*self.width_multiple),int(128*self.width_multiple))
@@ -209,34 +212,100 @@ class YOLOV8():
 
         return c15,c18,c21
     
-    def Detect():
-        return
+    def Detect(self,x, ch:tuple=(),nc=80):
+        print("-------------",ch)
+        self.nc = nc  # number of classes
+        self.nl = len(ch)  # number of detection layers
+        self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        self.no = nc + self.reg_max * 4  # number of outputs per anchor
+        self.stride = tf.zeros(self.nl)  # strides computed during build
+        c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], self.nc)  # channels
+
+        conv_layer1 = tf.layers.Conv2D(filters=4*self.reg_max,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+
+        conv_layer2 = tf.layers.Conv2D(filters=self.nc,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
 
 
-    def Network(self):
+        for i,dim in enumerate(ch):
+            y1 = Conv(x[i],(3,3,dim,c2),trainable=True,padding="SAME",downsample=False)
+            y1 = Conv(y1,(3,3,y1.shape[-1].value,c3),trainable=True,padding="SAME",downsample=False)
+            y1 = conv_layer1(y1)
+
+            y2 = Conv(x[i],(3,3,dim,c2),trainable=True,padding="SAME",downsample=False)
+            y2 = Conv(y2,(3,3,y2.shape[-1].value,c3),trainable=True,padding="SAME",downsample=False)
+            y2 = conv_layer2(y2)
+
+            x[i] = tf.concat([y1,y2],3)
+        return x
+
+
+    def __call__(self,input_data):
         try:
-            c4,c6,c9 = self.Backbone()
-            c14,c18,c21 = self.Head(c4,c6,c9)
+            c4,c6,c9 = self.Backbone(input_data)
+            c15,c18,c21 = self.Head(c4,c6,c9)
+            ch = c15.shape[-1].value,c18.shape[-1].value,c21.shape[-1].value
+            detect = self.Detect([c15,c18,c21], ch = ch, nc=80)
+            print("DETECT SHAPE-------",detect[0].shape,detect[1].shape,detect[2].shape)
+            flatten = tf.layers.Flatten()
+            fc2 = tf.layers.Dense(4, activation=None)
+            
+            return fc2(flatten(detect[0]))
+
         except:
-            logger.error(traceback.print_exc)
+            logger.error(traceback.print_exc())
             return None
-        return c14,c18,c21
     
-
-
 
 
 if __name__=="__main__":
 
-    batch_size = 2
+    num_examples = 100
     height = 640
     width = 640
     channels = 3
-    x = tf.random.uniform([height*width*channels*batch_size],0,1)
-    input_data = tf.reshape(x,[batch_size,width,height,channels])
+    batch_size = 4
+    # x = tf.random.uniform([height*width*channels*num_examples],0,1)
+    input_data = tf.random.normal((num_examples,) + (height,width,channels))
+    # samples = tf.random.categorical(tf.math.log([[0.5, 0.5]]), num_examples)
+    samples = tf.random.uniform((num_examples,4), minval=0, maxval=3, dtype=tf.int32)
+    # input_data = tf.reshape(x,[num_examples,width,height,channels])
 
-    yolov8 = YOLOV8(input_data=input_data)
+    yolov8 = YOLOV8()
+    
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
 
-    routes = yolov8.Network()
-    if routes==None:
-         logger.error("Error in Model Buidling")
+    dataset = tf.data.Dataset.from_tensor_slices((input_data, samples))
+    dataset = dataset.shuffle(buffer_size=num_examples).batch(batch_size).prefetch(batch_size)
+    
+    num_epochs = 10
+    tf.global_variables_initializer()
+    for epoch in range(num_epochs):
+        for batch_x, batch_y in dataset:
+            
+            with tf.GradientTape() as tape:
+                logits = yolov8(batch_x)
+                loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=batch_y))
+                print("ssssssssssssss",loss,yolov8.variables)
+            gradients = tape.gradient(loss, yolov8.variables)
+            optimizer.apply_gradients(zip(gradients, yolov8.variables))
+
+        # Calculate accuracy on validation set
+        # correct_prediction = tf.equal(tf.argmax(yolov8(mnist.validation.images), 1), tf.argmax(mnist.validation.labels, 1))
+        # accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        # val_accuracy = accuracy.numpy()
+        print("Epoch {}".format(epoch + 1))
+
+    # if routes==None:
+    #      logger.error("Error in Model Buidling")
