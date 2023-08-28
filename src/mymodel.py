@@ -6,7 +6,7 @@ tf.enable_eager_execution(
 import numpy as np 
 import logging
 import traceback
-
+from modules import *
 # Configure the logger
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
@@ -14,107 +14,170 @@ logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s 
 logger = logging.getLogger(__name__)
 
 
-
-
-
-
-def Conv(input_data, filters_shape:tuple, trainable:bool, name=None, downsample:bool=False, padding:str="SAME",  activate:bool=True, bn:bool=True, act_fun='leaky_relu'):
+# def Conv(input_data, filters_shape:tuple, trainable:bool, name=None, downsample:bool=False, padding:str="SAME",  activate:bool=True, bn:bool=True, act_fun='leaky_relu'):
     
-    """
-    params: 
-    input_data: input_tensor
-    filters_shape: 1D tuple of length 4, [kernerl_h,kernel_w,channel_in, channel_out]
-    trainable: true/false
-    """
-    # with tf.variable_scope(name):
-    if downsample:
-        pad_h, pad_w = (filters_shape[0] - 2) // 2 + 1, (filters_shape[1] - 2) // 2 + 1
-        paddings = tf.constant([[0, 0], [pad_h, pad_h], [pad_w, pad_w], [0, 0]])
-        input_data = tf.pad(input_data, paddings, 'CONSTANT')
-        strides = (2, 2)
-        padding="VALID"
-    else:
-        strides = (1, 1)
+#     """
+#     params: 
+#     input_data: input_tensor
+#     filters_shape: 1D tuple of length 4, [kernerl_h,kernel_w,channel_in, channel_out]
+#     trainable: true/false
+#     """
+#     # with tf.variable_scope(name):
+#     if downsample:
+#         pad_h, pad_w = (filters_shape[0] - 2) // 2 + 1, (filters_shape[1] - 2) // 2 + 1
+#         paddings = tf.constant([[0, 0], [pad_h, pad_h], [pad_w, pad_w], [0, 0]])
+#         input_data = tf.pad(input_data, paddings, 'CONSTANT')
+#         strides = (2, 2)
+#         padding="VALID"
+#     else:
+#         strides = (1, 1)
         
 
 
-    conv_layer = tf.layers.Conv2D(filters=filters_shape[-1],
-                            kernel_size=(filters_shape[0],filters_shape[1]), 
-                            strides=strides, 
-                            padding=padding,
-                            trainable=trainable,
-                            use_bias=True,
-                            kernel_initializer = tf.random_normal_initializer(stddev=0.01),
-                            name=name)
+#     conv_layer = tf.layers.Conv2D(filters=filters_shape[-1],
+#                             kernel_size=(filters_shape[0],filters_shape[1]), 
+#                             strides=strides, 
+#                             padding=padding,
+#                             trainable=trainable,
+#                             use_bias=True,
+#                             kernel_initializer = tf.random_normal_initializer(stddev=0.01),
+#                             name=name)
 
-    if bn:
-        bn_layer = tf.layers.BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True,
-                                        beta_initializer=tf.zeros_initializer(), gamma_initializer=tf.ones_initializer(),
-                                        moving_mean_initializer=tf.zeros_initializer(), moving_variance_initializer=tf.ones_initializer(),
-                                        beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None,
-                                        trainable=trainable, name=None, renorm=False, renorm_clipping=None,
-                                        renorm_momentum=0.99)
+#     if bn:
+#         bn_layer = tf.layers.BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True,
+#                                         beta_initializer=tf.zeros_initializer(), gamma_initializer=tf.ones_initializer(),
+#                                         moving_mean_initializer=tf.zeros_initializer(), moving_variance_initializer=tf.ones_initializer(),
+#                                         beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None,
+#                                         trainable=trainable, name=None, renorm=False, renorm_clipping=None,
+#                                         renorm_momentum=0.99)
 
-    res = conv_layer(input_data)
-    res = bn_layer(res)
+#     res = conv_layer(input_data)
+#     res = bn_layer(res)
 
-    if activate:
-        res = tf.nn.leaky_relu(res)
+#     if activate:
+#         res = tf.nn.leaky_relu(res)
 
-    return res
+#     return res
 
-def Bottleneck(input_data,ch_in,ch_out, k=(3,3), shortcut=False):
+# def Bottleneck(input_data,ch_in,ch_out, k=(3,3), shortcut=False):
     
-    kernel_shape=(*k,ch_in,ch_out)
-    conv1 = Conv(input_data,kernel_shape,True)
+#     kernel_shape=(*k,ch_in,ch_out)
+#     conv1 = Conv(input_data,kernel_shape,True)
     
-    # logger.info("in bottle nek----{}".format(conv1.shape))
-    conv2 = Conv(conv1,kernel_shape,True)
-    # logger.info("in bottle nek----{}".format(conv2.shape))
+#     # logger.info("in bottle nek----{}".format(conv1.shape))
+#     conv2 = Conv(conv1,kernel_shape,True)
+#     # logger.info("in bottle nek----{}".format(conv2.shape))
     
-    if shortcut:
-        return conv2
-    else:
-        # logger.info("concat shape {}".format(tf.math.add(conv2,input_data).shape))
-        return tf.math.add(conv2,input_data)
+#     if shortcut:
+#         return conv2
+#     else:
+#         # logger.info("concat shape {}".format(tf.math.add(conv2,input_data).shape))
+#         return tf.math.add(conv2,input_data)
 
 
-def C2F(input_data,ch_in:int,ch_out:int, replicate:int, shortcut:bool=False,e=0.5):
+# def C2F(input_data,ch_in:int,ch_out:int, replicate:int, shortcut:bool=False,e=0.5):
 
-    c = int(ch_out * e)  # hidden channels
-    # logger.info("First conv in C2F {} {} {}".format(ch_in, 2 * c, e))
-    kernel_shape1 = (1,1,ch_in, 2 * c)
-    # logger.info("__{} {}".format(input_data.shape, kernel_shape1))
-    conv1 = Conv(input_data, kernel_shape1,True)
+#     c = int(ch_out * e)  # hidden channels
+#     # logger.info("First conv in C2F {} {} {}".format(ch_in, 2 * c, e))
+#     kernel_shape1 = (1,1,ch_in, 2 * c)
+#     # logger.info("__{} {}".format(input_data.shape, kernel_shape1))
+#     conv1 = Conv(input_data, kernel_shape1,True)
     
-    x = conv1
-    splits = tf.split(x,2,3)
-    # logger.info("------------",splits, len(splits))
-    for i in range(replicate):
-        temp = Bottleneck(splits[-1],c,c,shortcut=shortcut)
-        # logger.info("temp shape {}".format(temp.shape))
-        splits.extend([temp])
+#     x = conv1
+#     splits = tf.split(x,2,3)
+#     # logger.info("------------",splits, len(splits))
+#     for i in range(replicate):
+#         temp = Bottleneck(splits[-1],c,c,shortcut=shortcut)
+#         # logger.info("temp shape {}".format(temp.shape))
+#         splits.extend([temp])
 
 
-    concat = tf.concat(splits,3)
+#     concat = tf.concat(splits,3)
 
-    kernel_shape2 = (1,1,(2 + replicate) * c, ch_out)
+#     kernel_shape2 = (1,1,(2 + replicate) * c, ch_out)
 
-    conv2 =  Conv(concat,kernel_shape2,True)
-    return conv2
+#     conv2 =  Conv(concat,kernel_shape2,True)
+#     return conv2
     
 
-def SPPF(input_data,ch_in,ch_out, k=(1,1)):
-    kernel_shape=(*k,ch_in,ch_out)
-    c1 = Conv(input_data,kernel_shape,True,downsample=False)
-    maxpool1 = tf.layers.MaxPooling2D(5,1, padding="same")
-    m1 = maxpool1(c1)
-    m2 = maxpool1(m1)
-    m3 = maxpool1(m2)
-    concat = tf.concat([c1,m1,m2,m3],3)
-    kernel_shape2 = (1,1,ch_out)
-    c2 = Conv(concat,kernel_shape2,True)
-    return c2
+# def SPPF(input_data,ch_in,ch_out, k=(1,1)):
+#     kernel_shape=(*k,ch_in,ch_out)
+#     c1 = Conv(input_data,kernel_shape,True,downsample=False)
+#     maxpool1 = tf.layers.MaxPooling2D(5,1, padding="same")
+#     m1 = maxpool1(c1)
+#     m2 = maxpool1(m1)
+#     m3 = maxpool1(m2)
+#     concat = tf.concat([c1,m1,m2,m3],3)
+#     kernel_shape2 = (1,1,ch_out)
+#     c2 = Conv(concat,kernel_shape2,True)
+#     return c2
+
+
+class MyModel(tf.keras.Model):
+    def __init__(self, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)):
+        super(MyModel,self).__init__()
+        self.depth_multiple = d
+        self.width_multiple = w
+        self.ratio = r
+        self.batch_size = batch_size
+        self.input_data = None
+
+        k1 = (3,3,3,int(64*self.width_multiple))
+        self.c0 = Conv(k1,True,downsample=True)
+        
+        k1 = (3,3,int(64*self.width_multiple),int(128*self.width_multiple))
+        self.c1 = Conv(k1,True,downsample=True)
+                
+        self.c2 = C2F(int(128*self.width_multiple),int(128*self.width_multiple),int(3*self.depth_multiple),True)
+        
+        k1 = (3,3,int(128*self.width_multiple),int(256*self.width_multiple))
+        self.c3 = Conv(k1,True,downsample=True)
+        
+        
+        self.c4 = C2F(int(256*self.width_multiple),int(256*self.width_multiple),int(6*self.depth_multiple),True)
+        
+
+        k1 = (3,3,int(256*self.width_multiple),int(512*self.width_multiple))
+        self.c5 = Conv(k1,True,downsample=True)
+        
+
+        self.c6 = C2F(int(512*self.width_multiple),int(512*self.width_multiple),int(6*self.depth_multiple),True)
+        
+
+        k1 = (3,3,int(512*self.width_multiple),int(512*self.width_multiple*self.ratio))
+        self.c7 = Conv(k1,True,downsample=True)
+        
+
+        self.c8 = C2F(int(512*self.width_multiple*self.ratio),int(512*self.width_multiple*self.ratio),int(3*self.depth_multiple),True)
+       
+
+        self.c9 = SPPF(int(512*self.width_multiple*self.ratio),int(512*self.width_multiple*self.ratio))
+        
+
+
+    def __call__(self,input_data):
+        x = self.c0(input_data)
+        logger.info("layer 0 execute {}".format(x.shape))
+        x = self.c1(x)
+        logger.info("layer 1 execute {}".format(x.shape))
+        x = self.c2(x)
+        logger.info("layer 2 execute {}".format(x.shape))
+        x = self.c3(x)
+        logger.info("layer 3 execute {}".format(x.shape))
+        x = self.c4(x)
+        logger.info("Layer 4 execute {}".format(x.shape))
+        x = self.c5(x)
+        logger.info("layer 5 execute {}".format(x.shape))
+        x = self.c6(x)
+        logger.info("Layer 6 execute {}".format(x.shape))
+        x = self.c7(x)
+        logger.info("layer 7 execute {}".format(x.shape))
+        x = self.c8(x)
+        logger.info("Layer 8 execute{}".format(x.shape))
+        x = self.c9(x)
+        logger.info("Layer 9 execute {}".format(x.shape))
+
+        return x
 
 
 class YOLOV8(tf.keras.Model):
@@ -126,7 +189,9 @@ class YOLOV8(tf.keras.Model):
         self.batch_size = batch_size
         # self.input_shape = input_shape
         self.input_data = None
-    
+
+
+
     def Backbone(self,input_data):
         try:
             k1 = (3,3,3,int(64*self.width_multiple))
@@ -282,30 +347,32 @@ if __name__=="__main__":
     samples = tf.random.uniform((num_examples,4), minval=0, maxval=3, dtype=tf.int32)
     # input_data = tf.reshape(x,[num_examples,width,height,channels])
 
-    yolov8 = YOLOV8()
-    
-    optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+    mymodel = MyModel()
+    mymodel(input_data)
 
-    dataset = tf.data.Dataset.from_tensor_slices((input_data, samples))
-    dataset = dataset.shuffle(buffer_size=num_examples).batch(batch_size).prefetch(batch_size)
+
+
+    # yolov8 = YOLOV8()
     
-    num_epochs = 10
-    tf.global_variables_initializer()
-    for epoch in range(num_epochs):
-        for batch_x, batch_y in dataset:
+    # optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+
+    # dataset = tf.data.Dataset.from_tensor_slices((input_data, samples))
+    # dataset = dataset.shuffle(buffer_size=num_examples).batch(batch_size).prefetch(batch_size)
+    
+    # num_epochs = 10
+    # tf.global_variables_initializer()
+    # for epoch in range(num_epochs):
+    #     for batch_x, batch_y in dataset:
             
-            with tf.GradientTape() as tape:
-                logits = yolov8(batch_x)
-                loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=batch_y))
-                print("ssssssssssssss",loss,yolov8.variables)
-            gradients = tape.gradient(loss, yolov8.variables)
-            optimizer.apply_gradients(zip(gradients, yolov8.variables))
+    #         with tf.GradientTape() as tape:
+    #             logits = yolov8(batch_x)
+    #             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=batch_y))
+    #             print("ssssssssssssss",loss,yolov8.variables)
+    #         gradients = tape.gradient(loss, yolov8.variables)
+    #         optimizer.apply_gradients(zip(gradients, yolov8.variables))
 
-        # Calculate accuracy on validation set
-        # correct_prediction = tf.equal(tf.argmax(yolov8(mnist.validation.images), 1), tf.argmax(mnist.validation.labels, 1))
-        # accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        # val_accuracy = accuracy.numpy()
-        print("Epoch {}".format(epoch + 1))
-
-    # if routes==None:
-    #      logger.error("Error in Model Buidling")
+    #     # Calculate accuracy on validation set
+    #     # correct_prediction = tf.equal(tf.argmax(yolov8(mnist.validation.images), 1), tf.argmax(mnist.validation.labels, 1))
+    #     # accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    #     # val_accuracy = accuracy.numpy()
+    #     print("Epoch {}".format(epoch + 1))

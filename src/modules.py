@@ -1,7 +1,8 @@
 import tensorflow as tf
-tf.enable_eager_execution(
-    config=None, device_policy=None, execution_mode=None
-)
+import numpy as np
+
+
+tf.enable_eager_execution(config=None, device_policy=None, execution_mode=None)
 
 class Conv(tf.keras.Model):
     def __init__(self,filters_shape:tuple, 
@@ -10,24 +11,24 @@ class Conv(tf.keras.Model):
                         downsample:bool=False, 
                         padding:str="SAME",  
                         activate:bool=True, 
-                        bn:bool=True, 
+                        bn:bool=True,
                         act_fun:str='leaky_relu') -> None:
         
-        super(Conv, self).__init__()
-
-        if downsample:
-            pad_h, pad_w = (filters_shape[0] - 2) // 2 + 1, (filters_shape[1] - 2) // 2 + 1
-            paddings = tf.constant([[0, 0], [pad_h, pad_h], [pad_w, pad_w], [0, 0]])
-            input_data = tf.pad(input_data, paddings, 'CONSTANT')
+        super().__init__()
+        self.activate = activate
+        self.act_fun = act_fun
+        self.downsample = downsample
+        self.filters_shape = filters_shape
+        if self.downsample:
             strides = (2, 2)
             padding="VALID"
         else:
             strides = (1, 1)
         
 
-        self.activate = activate
-        self.conv_layer = tf.layers.Conv2D(filters=filters_shape[-1],
-                                kernel_size=(filters_shape[0],filters_shape[1]), 
+
+        self.conv_layer = tf.layers.Conv2D(filters=self.filters_shape[-1],
+                                kernel_size=(self.filters_shape[0],self.filters_shape[1]), 
                                 strides=strides, 
                                 padding=padding,
                                 trainable=trainable,
@@ -44,11 +45,16 @@ class Conv(tf.keras.Model):
                                             renorm_momentum=0.99)
         
     def __call__(self,input_data):
+        if self.downsample:
+            pad_h, pad_w = (self.filters_shape[0] - 2) // 2 + 1, (self.filters_shape[1] - 2) // 2 + 1
+            paddings = tf.constant([[0, 0], [pad_h, pad_h], [pad_w, pad_w], [0, 0]])
+            input_data = tf.pad(input_data, paddings, 'CONSTANT')
         x = self.conv_layer(input_data)
         x = self.bn_layer(x)
 
         if self.activate:
-            x = tf.nn.leaky_relu(x)
+            if self.act_fun =="leaky_relu":
+                x = tf.nn.leaky_relu(x)
 
         return x
 
@@ -105,7 +111,7 @@ class C2F(tf.keras.Model):
 
 class SPPF(tf.keras.Model):
     def __init__(self, ch_in:int,
-                    ch_out:int, 
+                    ch_out:int,
                     k:tuple=(1,1)):
         
         super(SPPF,self).__init__()
@@ -122,3 +128,11 @@ class SPPF(tf.keras.Model):
         x3 = self.maxpool1(x)
         concat = tf.concat([x,x1,x2,x3],3)
         return self.conv2(concat)
+
+class Upsample():
+    def __init__(self,size:tuple=(40,40)):
+        self.size = size
+        pass
+    def __call__(self,input_data):
+        x = tf.image.resize_images(input_data, *self.size, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+        return x
