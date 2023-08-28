@@ -121,6 +121,8 @@ class MyModel(tf.keras.Model):
         self.ratio = r
         self.batch_size = batch_size
         self.input_data = None
+        
+    def Backbone(self):
 
         k1 = (3,3,3,int(64*self.width_multiple))
         self.c0 = Conv(k1,True,downsample=True)
@@ -133,52 +135,74 @@ class MyModel(tf.keras.Model):
         k1 = (3,3,int(128*self.width_multiple),int(256*self.width_multiple))
         self.c3 = Conv(k1,True,downsample=True)
         
-        
         self.c4 = C2F(int(256*self.width_multiple),int(256*self.width_multiple),int(6*self.depth_multiple),True)
         
-
         k1 = (3,3,int(256*self.width_multiple),int(512*self.width_multiple))
         self.c5 = Conv(k1,True,downsample=True)
         
-
         self.c6 = C2F(int(512*self.width_multiple),int(512*self.width_multiple),int(6*self.depth_multiple),True)
         
-
         k1 = (3,3,int(512*self.width_multiple),int(512*self.width_multiple*self.ratio))
         self.c7 = Conv(k1,True,downsample=True)
         
-
         self.c8 = C2F(int(512*self.width_multiple*self.ratio),int(512*self.width_multiple*self.ratio),int(3*self.depth_multiple),True)
        
-
         self.c9 = SPPF(int(512*self.width_multiple*self.ratio),int(512*self.width_multiple*self.ratio))
+
+    def Head(self):
+        self.c10 = Upsample(size=(40,40))
+        self.c11 = Concat(axis=3)
+        
+        shape = self.c9.output_shape + self.c6.output_shape
+        self.c12 = C2F(shape[-1].value, int(512*self.width_multiple),int(3*self.depth_multiple),shortcut=False)
+        
+        self.c13 = Upsample(size=(80,80))
+
+        self.c14 = Concat(axis=3)
+        shape = self.c12.output_shape+self.c4.output_shape
+        self.c15 = C2F(shape[-1].value, int(256*self.width_multiple) ,int(3*self.depth_multiple),shortcut=False)
+        
+        self.c16 = Conv((3,3,int(256*self.width_multiple),int(256*self.width_multiple)),True,downsample=True)
+        
+        self.c17 = Concat(axis=3)
+
+        shape = self.c12.output_shape+self.c16.output_shape
+        self.c18 = C2F(shape[-1].value, int(512*self.width_multiple) ,int(3*self.depth_multiple),shortcut=False)
+        
+        self.c19 = Conv((3,3,int(512*self.width_multiple),int(512*self.width_multiple)),True,downsample=True)
+        
+        self.c20 = Concat(axis=3)
+
+        shape = self.c9.output_shape + self.c19.output_shape
+        self.c21 = C2F(shape[-1].value, int(512*self.width_multiple*self.ratio) ,int(3*self.depth_multiple),shortcut=False)
         
 
+    def __call__Backbone(self,input_data):
+        x0 = self.c0(input_data)
+        logger.info("layer 0 execute {}".format(x0.shape))
+        x1 = self.c1(x0)
+        logger.info("layer 1 execute {}".format(x1.shape))
+        x2 = self.c2(x1)
+        logger.info("layer 2 execute {}".format(x2.shape))
+        x3 = self.c3(x2)
+        logger.info("layer 3 execute {}".format(x3.shape))
+        x4 = self.c4(x3)
+        logger.info("Layer 4 execute {}".format(x4.shape))
+        x5 = self.c5(x4)
+        logger.info("layer 5 execute {}".format(x5.shape))
+        x6 = self.c6(x5)
+        logger.info("Layer 6 execute {}".format(x6.shape))
+        x7 = self.c7(x6)
+        logger.info("layer 7 execute {}".format(x7.shape))
+        x8 = self.c8(x7)
+        logger.info("Layer 8 execute {}".format(x8.shape))
+        x9 = self.c9(x8)
+        logger.info("Layer 9 execute {}".format(x9.shape))
 
-    def __call__(self,input_data):
-        x = self.c0(input_data)
-        logger.info("layer 0 execute {}".format(x.shape))
-        x = self.c1(x)
-        logger.info("layer 1 execute {}".format(x.shape))
-        x = self.c2(x)
-        logger.info("layer 2 execute {}".format(x.shape))
-        x = self.c3(x)
-        logger.info("layer 3 execute {}".format(x.shape))
-        x = self.c4(x)
-        logger.info("Layer 4 execute {}".format(x.shape))
-        x = self.c5(x)
-        logger.info("layer 5 execute {}".format(x.shape))
-        x = self.c6(x)
-        logger.info("Layer 6 execute {}".format(x.shape))
-        x = self.c7(x)
-        logger.info("layer 7 execute {}".format(x.shape))
-        x = self.c8(x)
-        logger.info("Layer 8 execute{}".format(x.shape))
-        x = self.c9(x)
-        logger.info("Layer 9 execute {}".format(x.shape))
+        return x4, x6, x9
 
-        return x
-
+    def __call__Head(self,x4,x6,x9):
+        return
 
 class YOLOV8(tf.keras.Model):
     def __init__(self, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)) -> None:
@@ -240,7 +264,8 @@ class YOLOV8(tf.keras.Model):
         c11 = tf.concat([c10,c6],3)
         logger.info("Layer 11 execute {}".format(c11.shape))
         
-        shape = c11.shape        
+        shape = c11.shape   
+
         c12 = C2F(c11,shape[-1].value, int(512*self.width_multiple),int(3*self.depth_multiple),shortcut=False)
         logger.info("Layer 12 execute {}".format(c12.shape))
 

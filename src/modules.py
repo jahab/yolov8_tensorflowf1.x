@@ -19,6 +19,8 @@ class Conv(tf.keras.Model):
         self.act_fun = act_fun
         self.downsample = downsample
         self.filters_shape = filters_shape
+        self.input_shape = self.filters_shape[-2]
+        self.output_shape = self.filters_shape[-1]
         if self.downsample:
             strides = (2, 2)
             padding="VALID"
@@ -69,6 +71,8 @@ class Bottleneck(tf.keras.Model):
         self.conv1 = Conv(self.kernel_shape,True)
         self.conv2 = Conv(self.kernel_shape,True)
         self.shortcut = shortcut
+        self.input_shape = self.conv1.input_shape
+        self.output_shape = self.conv2.output_shape
 
     def __call__(self,input_data):
         x = self.conv1(input_data)
@@ -97,6 +101,9 @@ class C2F(tf.keras.Model):
         
         kernel_shape2 = (1,1,(2 + replicate) * self.c, ch_out)
         self.conv2 = Conv(kernel_shape2,True)
+        self.concat1 = Concat(axis=3)
+        self.input_shape = self.conv1.input_shape
+        self.output_shape = self.conv2.output_shape
     
     def __call__(self,input_data):
         x = self.conv1(input_data)
@@ -106,7 +113,7 @@ class C2F(tf.keras.Model):
             temp = m(splits[-1])
             splits.extend([temp])
         
-        concat = tf.concat(splits,3)
+        concat = self.concat1(splits) #tf.concat(splits,3)
         return self.conv2(concat)
 
 class SPPF(tf.keras.Model):
@@ -120,13 +127,15 @@ class SPPF(tf.keras.Model):
         self.maxpool1 = tf.layers.MaxPooling2D(5,1, padding="same")
         self.kernel_shape2 = (1,1,ch_out)
         self.conv2 = Conv(self.kernel_shape2,True)
-    
+        self.concat1 = Concat(axis=3)
+        self.input_shape = self.conv1.input_shape
+        self.output_shape = self.conv2.output_shape
     def __call__(self,input_data):
         x = self.conv1(input_data)
         x1 = self.maxpool1(x)
         x2 = self.maxpool1(x)
         x3 = self.maxpool1(x)
-        concat = tf.concat([x,x1,x2,x3],3)
+        concat = self.concat1([x,x1,x2,x3])
         return self.conv2(concat)
 
 class Upsample():
@@ -136,3 +145,11 @@ class Upsample():
     def __call__(self,input_data):
         x = tf.image.resize_images(input_data, *self.size, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         return x
+
+class Concat():
+    def __init__(self,axis:int=3) -> None:
+        self.axis = axis
+        
+    def __call__(self,x:list):
+        return tf.concat(x,self.axis)
+        
