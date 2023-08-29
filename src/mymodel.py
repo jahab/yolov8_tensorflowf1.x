@@ -153,29 +153,81 @@ class MyModel(tf.keras.Model):
         self.c10 = Upsample(size=(40,40))
         self.c11 = Concat(axis=3)
         
-        shape = self.c9.output_shape + self.c6.output_shape
+        shape = self.c9.output_filter + self.c6.output_filter
         self.c12 = C2F(shape[-1].value, int(512*self.width_multiple),int(3*self.depth_multiple),shortcut=False)
         
         self.c13 = Upsample(size=(80,80))
 
         self.c14 = Concat(axis=3)
-        shape = self.c12.output_shape+self.c4.output_shape
+        shape = self.c12.output_filter+self.c4.output_filter
         self.c15 = C2F(shape[-1].value, int(256*self.width_multiple) ,int(3*self.depth_multiple),shortcut=False)
         
         self.c16 = Conv((3,3,int(256*self.width_multiple),int(256*self.width_multiple)),True,downsample=True)
         
         self.c17 = Concat(axis=3)
 
-        shape = self.c12.output_shape+self.c16.output_shape
+        shape = self.c12.output_filter+self.c16.output_filter
         self.c18 = C2F(shape[-1].value, int(512*self.width_multiple) ,int(3*self.depth_multiple),shortcut=False)
         
         self.c19 = Conv((3,3,int(512*self.width_multiple),int(512*self.width_multiple)),True,downsample=True)
         
         self.c20 = Concat(axis=3)
 
-        shape = self.c9.output_shape + self.c19.output_shape
+        shape = self.c9.output_filter + self.c19.output_filter
         self.c21 = C2F(shape[-1].value, int(512*self.width_multiple*self.ratio) ,int(3*self.depth_multiple),shortcut=False)
+
+    def Detect(self,ch:tuple=(),nc=80):
+        print("-------------",ch)
+        self.nc = nc  # number of classes
+        self.nl = len(ch)  # number of detection layers
+        self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        self.no = nc + self.reg_max * 4  # number of outputs per anchor
+        self.stride = tf.zeros(self.nl)  # strides computed during build
+        c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], self.nc)  # channels
+
+        self.conv_layer1 = tf.layers.Conv2D(filters=4*self.reg_max,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+
+        self.conv_layer2 = tf.layers.Conv2D(filters=self.nc,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
         
+        bbox_loss = {}
+        cls_loss = {}
+
+        for i,dim in enumerate(ch):
+            
+            y1 = Conv((3,3,dim,c2),trainable=True,padding="SAME",downsample=False)
+            y2 = Conv((3,3,y1.output_filter,c3),trainable=True,padding="SAME",downsample=False)
+            conv_layer1 = tf.layers.Conv2D(filters=4*self.reg_max,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+            bbox_loss[i] = [y1,y2,conv_layer1]
+
+            y1 = Conv((3,3,dim,c2),trainable=True,padding="SAME",downsample=False)
+            y2 = Conv((3,3,y1.output_filter,c3),trainable=True,padding="SAME",downsample=False)
+            conv_layer2 = tf.layers.Conv2D(filters=self.nc,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+            cls_loss[i] = [y1,y2,conv_layer2]
+
 
     def __call__Backbone(self,input_data):
         x0 = self.c0(input_data)
@@ -202,7 +254,31 @@ class MyModel(tf.keras.Model):
         return x4, x6, x9
 
     def __call__Head(self,x4,x6,x9):
-        return
+        x10 = self.c10(x9)
+        logger.info("Layer 10 execute {}".format(x10.shape))
+        x11 = self.c11([x10,x6])
+        logger.info("Layer 11 execute {}".format(x11.shape))
+        x12 = self.c12(x11)
+        logger.info("Layer 12 execute {}".format(x12.shape))
+        x13 = self.c13(x12)
+        logger.info("Layer 13 execute {}".format(x13.shape))
+        x14 = self.c14([x13,x4])
+        logger.info("Layer 14 execute {}".format(x14.shape))
+        x15 = self.c15(x14)
+        logger.info("Layer 15 execute {}".format(x15.shape))
+        x16 = self.c16(x15)
+        logger.info("Layer 16 execute {}".format(x16.shape))
+        x17 = self.c17([x16,x12])
+        logger.info("Layer 17 execute {}".format(x17.shape))
+        x18 = self.c18(x17)
+        logger.info("Layer 18 execute {}".format(x18.shape))
+        x19 = self.c19(x18)
+        logger.info("Layer 19 execute {}".format(x19.shape))
+        x20 = self.c20([x19,x9])
+        logger.info("Layer 20 execute {}".format(x20.shape))
+        x21 =self.c21(x20)
+        logger.info("Layer 21 execute {}".format(x21.shape))
+        return x15,x18,x21
 
 class YOLOV8(tf.keras.Model):
     def __init__(self, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)) -> None:

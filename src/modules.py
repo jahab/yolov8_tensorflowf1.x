@@ -19,8 +19,8 @@ class Conv(tf.keras.Model):
         self.act_fun = act_fun
         self.downsample = downsample
         self.filters_shape = filters_shape
-        self.input_shape = self.filters_shape[-2]
-        self.output_shape = self.filters_shape[-1]
+        self.input_filter = self.filters_shape[-2]
+        self.output_filter = self.filters_shape[-1]
         if self.downsample:
             strides = (2, 2)
             padding="VALID"
@@ -71,8 +71,8 @@ class Bottleneck(tf.keras.Model):
         self.conv1 = Conv(self.kernel_shape,True)
         self.conv2 = Conv(self.kernel_shape,True)
         self.shortcut = shortcut
-        self.input_shape = self.conv1.input_shape
-        self.output_shape = self.conv2.output_shape
+        self.input_filter = self.conv1.input_filter
+        self.output_filter = self.conv2.output_filter
 
     def __call__(self,input_data):
         x = self.conv1(input_data)
@@ -102,8 +102,8 @@ class C2F(tf.keras.Model):
         kernel_shape2 = (1,1,(2 + replicate) * self.c, ch_out)
         self.conv2 = Conv(kernel_shape2,True)
         self.concat1 = Concat(axis=3)
-        self.input_shape = self.conv1.input_shape
-        self.output_shape = self.conv2.output_shape
+        self.input_filter = self.conv1.input_filter
+        self.output_filter = self.conv2.output_filter
     
     def __call__(self,input_data):
         x = self.conv1(input_data)
@@ -128,8 +128,8 @@ class SPPF(tf.keras.Model):
         self.kernel_shape2 = (1,1,ch_out)
         self.conv2 = Conv(self.kernel_shape2,True)
         self.concat1 = Concat(axis=3)
-        self.input_shape = self.conv1.input_shape
-        self.output_shape = self.conv2.output_shape
+        self.input_filter = self.conv1.input_filter
+        self.output_filter = self.conv2.output_filter
     def __call__(self,input_data):
         x = self.conv1(input_data)
         x1 = self.maxpool1(x)
