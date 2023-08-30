@@ -1,8 +1,22 @@
+from typing import Any
 import tensorflow as tf
 import numpy as np
 
 
 tf.enable_eager_execution(config=None, device_policy=None, execution_mode=None)
+
+
+def ModuleList2Seq():
+    def __init__(self,layer_list:list) -> None:
+        self.layer_list = layer_list
+        
+
+    def __call__(self, inputs) -> Any:
+        x = inputs
+        for layer in self.layers_list:
+            x = layer(x)
+        return x
+
 
 class Conv(tf.keras.Model):
     def __init__(self,filters_shape:tuple, 
