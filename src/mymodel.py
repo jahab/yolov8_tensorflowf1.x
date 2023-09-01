@@ -114,16 +114,18 @@ logger = logging.getLogger(__name__)
 
 
 class MyModel(tf.keras.Model):
-    def __init__(self, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)):
+    def __init__(self, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3),num_classes:int=80):
         super(MyModel,self).__init__()
         self.depth_multiple = d
         self.width_multiple = w
         self.ratio = r
         self.batch_size = batch_size
         self.input_data = None
+        self.nc = num_classes
         self.InitBackbone()
         self.InitHead()
-        self.InitHead()
+        ch = self.c15.shape[-1].value, self.c18.shape[-1].value, self.c21.shape[-1].value
+        self.InitDetect(ch,nc = self.nc)
         
     def InitBackbone(self):
 
@@ -301,6 +303,12 @@ class MyModel(tf.keras.Model):
         x15, x18, x21 = self.__callHead__(x4, x6, x9)
         ch = x15.shape[-1].value,x18.shape[-1].value,x21.shape[-1].value
         self.__callDetect__()
+
+
+
+
+
+
 class YOLOV8(tf.keras.Model):
     def __init__(self, d:float=0.33,w:float=0.50,r:float=2.0, batch_size:int=4,input_shape:tuple=(640,640,3)) -> None:
         super(YOLOV8, self).__init__()

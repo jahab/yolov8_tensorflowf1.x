@@ -1,4 +1,5 @@
 from typing import Any
+import math
 import tensorflow as tf
 import numpy as np
 
@@ -166,4 +167,107 @@ class Concat():
         
     def __call__(self,x:list):
         return tf.concat(x,self.axis)
+
+class DFL(tf.keras.Model):
+    # Integral module of Distribution Focal Loss (DFL) proposed in Generalized Focal Loss https://ieeexplore.ieee.org/document/9792391
+    def __init__(self, c1=16):
+        super().__init__()
         
+        # self.conv = nn.Conv2d(c1, 1, 1, bias=False).requires_grad_(False)
+        self.conv = tf.layers.Conv2D(1,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=False,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+        
+
+        self.conv.set_weights = np.arange(c1,dtype=float)
+        # x = torch.arange(c1, dtype=torch.float)
+        # self.conv.weight.data[:] = nn.Parameter(x.view(1, c1, 1, 1))
+        
+        self.c1 = c1
+
+    def __call__(self, x):
+        b, c, a = x.shape  # batch, channels, anchors 
+        x = tf.reshape(x,[b, 4, self.c1, a]) # TODO: find out the shape and adjust
+        x = tf.image.transpose(x) # TODO: find out the shape and adjust
+        x = tf.nn.softmax(x,axis=1) # TODO: find out the shape and adjust
+        x = self.conv(x) # TODO: find out the shape and adjust
+        x = tf.reshape(x, [b,4,a]) # TODO: find out the shape and adjust
+        return x
+        # return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
+        # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
+
+
+class Detect(tf.keras.Model):
+    def __init__(self, ch:tuple=(),nc=80):
+        super().__init__()
+        print("-------------",ch)
+        self.nc = nc  # number of classes
+        self.nl = len(ch)  # number of detection layers
+        self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        self.no = nc + self.reg_max * 4  # number of outputs per anchor
+        self.stride = tf.zeros(self.nl)  # strides computed during build
+        c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], self.nc)  # channels
+
+        self.conv_layer1 = tf.layers.Conv2D(filters=4*self.reg_max,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+
+        self.conv_layer2 = tf.layers.Conv2D(filters=self.nc,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+        
+        self.concat = Concat(axis=3)
+        self.bbox_layer = {}
+        self.cls_layer = {}
+
+        for i,dim in enumerate(ch):
+            
+            y1 = Conv((3,3,dim,c2),trainable=True,padding="SAME",downsample=False)
+            y2 = Conv((3,3,y1.output_filter,c3),trainable=True,padding="SAME",downsample=False)
+            conv_layer1 = tf.layers.Conv2D(filters=4*self.reg_max,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+            self.bbox_layer[i] = ModuleList2Seq([y1,y2,conv_layer1])
+
+            y1 = Conv((3,3,dim,c2),trainable=True,padding="SAME",downsample=False)
+            y2 = Conv((3,3,y1.output_filter,c3),trainable=True,padding="SAME",downsample=False)
+            conv_layer2 = tf.layers.Conv2D(filters=self.nc,
+                            kernel_size=(1,1), 
+                            strides=1, 
+                            padding="VALID",
+                            trainable=True,
+                            use_bias=True,
+                            kernel_initializer = tf.random_normal_initializer(stddev=0.01))
+            self.cls_layer[i] = ModuleList2Seq([y1,y2,conv_layer2])
+
+    def __call__(self,x):
+        for i in range(self.nl):
+            y1 = self.bbox_layer[i](x[i])
+            y2 = self.cls_layer[i](x[i])
+            x[i] = self.concat([y1,y2])
+        return x
+    
+    def bias_init(self):
+        # TODO
+        m = self  # self.model[-1]  # Detect() module
+        # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1
+        # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
+        for a, b, s in zip(self.cv2, m.cv3, m.stride):  # from
+            a[-1].bias.data[:] = 1.0  # box
+            b[-1].bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
